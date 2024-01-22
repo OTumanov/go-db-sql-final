@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 )
 
 type ParcelStore struct {
@@ -24,7 +23,7 @@ func (s ParcelStore) Add(p Parcel) (int, error) {
 
 func (s ParcelStore) Get(number int) (Parcel, error) {
 	p := Parcel{}
-	err := s.db.QueryRow("SELECT client, status, address, created_at FROM parcel WHERE number = ?", number).Scan(&p.Client, &p.Status, &p.Address, &p.CreatedAt)
+	err := s.db.QueryRow("SELECT number, client, status, address, created_at FROM parcel WHERE number = ?", number).Scan(&p.Number, &p.Client, &p.Status, &p.Address, &p.CreatedAt)
 	if err != nil {
 		return p, err
 	}
@@ -48,53 +47,33 @@ func (s ParcelStore) GetByClient(client int) ([]Parcel, error) {
 		parcels = append(parcels, p)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return parcels, nil
 }
 
 func (s ParcelStore) SetStatus(number int, status string) error {
-	s.db.QueryRow("UPDATE parcel SET status = ? WHERE number = ?", status, number)
+	_, err := s.db.Exec("UPDATE parcel SET status = ? WHERE number = ?", status, number)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (s ParcelStore) SetAddress(number int, address string) error {
-	row, err := s.db.Query("SELECT status FROM parcel WHERE number = ?", number)
+	_, err := s.db.Exec("UPDATE parcel SET address = ? WHERE number = ? AND status = ?", address, number, ParcelStatusRegistered)
 	if err != nil {
 		return err
 	}
-	if row.Next() {
-		var status string
-		err = row.Scan(&status)
-		if err != nil {
-			return err
-		}
-		if status != "registered" {
-			return fmt.Errorf("менять адрес можно только если значение статуса registered")
-		}
-	}
-	row.Close()
-
-	s.db.QueryRow("UPDATE parcel SET address = ? WHERE number = ?", address, number)
 	return nil
 }
 
 func (s ParcelStore) Delete(number int) error {
-	row, err := s.db.Query("SELECT status FROM parcel WHERE number = ?", number)
+	_, err := s.db.Exec("DELETE FROM parcel WHERE number = ? AND status = ?", number, ParcelStatusRegistered)
 	if err != nil {
 		return err
 	}
-	if row.Next() {
-		var status string
-		err = row.Scan(&status)
-		if err != nil {
-			return err
-		}
-		if status != "registered" {
-			return fmt.Errorf("удалять строку можно только если значение статуса registered")
-		}
-	}
-
-	row.Close()
-
-	s.db.Exec("DELETE FROM parcel WHERE number = ?", number)
 	return nil
 }
